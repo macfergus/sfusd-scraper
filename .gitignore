@@ -1,0 +1,9 @@
+tmp/
+deploy/
+hyperd.log
+npm-debug.log
+.python-version
+config.json
+
+# Local Netlify folder
+.netlify
