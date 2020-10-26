@@ -1,3 +1,7 @@
+mysqlclient
+numpy
+pandas
+plotly
+pytz
 requests
 tableauhyperapi
-mysqlclient
