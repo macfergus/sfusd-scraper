@@ -26,16 +26,25 @@ def get_twbx_file(output_dir):
     return outputfile
 
 
-def get_tasks_db(twbx_file, output_dir):
+def get_dbs(twbx_file, output_dir):
     with zipfile.ZipFile(twbx_file, 'r') as z:
         for fname in z.namelist():
-            if 'SFUSD Tasks' in fname and fname.endswith('.hyper'):
+            if fname.endswith('.hyper'):
                 z.extract(fname, output_dir)
-                return os.path.join(output_dir, fname)
+                yield os.path.join(output_dir, fname)
 
 
 def to_decimal(f):
     return Decimal(int(1000 * f)) / Decimal(1000)
+
+
+def has_tasks_table(hyper_conn):
+    task_table = None
+    tables = hyper_conn.catalog.get_table_names('Extract')
+    for t in tables:
+        if t.name.unescaped.startswith('SFUSD Tasks'):
+            return True
+    return False
 
 
 def get_tasks(hyper_conn):
@@ -50,7 +59,7 @@ def get_tasks(hyper_conn):
     results = []
     with hyper_conn.execute_query(f'SELECT * FROM {task_table}') as result:
         for row in result:
-            task_id, task_desc, _, _, _, progress, _ = row
+            task_id, task_desc, _, _, _, progress = row[:6]
             if task_desc is None:
                 # Seems to be some dummy rows in here
                 continue
@@ -74,7 +83,7 @@ def get_subtasks(hyper_conn):
     results = []
     with hyper_conn.execute_query(f'SELECT * FROM {subtask_table}') as result:
         for row in result:
-            task_id, subtask_id, subtask_desc, _, progress, _ = row
+            task_id, subtask_id, subtask_desc, _, progress = row[:5]
             results.append(Subtask(
                 task_id=int(task_id),
                 subtask_id=int(subtask_id),
@@ -119,14 +128,15 @@ def main():
     with tempfile.TemporaryDirectory(prefix='sfusd-scraper') as tmpdir:
         snapshot_ts = int(time.time())
         twbx_file = get_twbx_file(tmpdir)
-        tasks_file = get_tasks_db(twbx_file, tmpdir)
-    
-        with HyperProcess(
-                Telemetry.DO_NOT_SEND_USAGE_DATA_TO_TABLEAU, 'sfusd-scraper'
-        ) as hyper:
-            with Connection(hyper.endpoint, tasks_file) as connection:
-                tasks = get_tasks(connection)
-                subtasks = get_subtasks(connection)
+        for db_file in get_dbs(twbx_file, tmpdir):
+            with HyperProcess(
+                    Telemetry.DO_NOT_SEND_USAGE_DATA_TO_TABLEAU, 'sfusd-scraper'
+            ) as hyper:
+                with Connection(hyper.endpoint, db_file) as connection:
+                    if has_tasks_table(connection):
+                        tasks = get_tasks(connection)
+                        subtasks = get_subtasks(connection)
+                        break
 
         save_tasks(conn, snapshot_ts, tasks, subtasks)
 
