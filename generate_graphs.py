@@ -23,8 +23,9 @@ body {
 <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 <div style="explanation">
 <p>These graphs are <strong>unofficial</strong>! The data was scraped from the
-<a href="https://public.tableau.com/profile/thu.cung#!/vizhome/SFUSDReopeningReadinessDashboard/ReopeningDashboard">Official SFUSD dashboard</a>
+<a href="https://public.tableau.com/profile/thu.cung#!/vizhome/SFUSDReopeningReadinessDashboard/ReopeningDashboard">Official SFUSD dashboard</a>. I try my best to keep it up to date, but I can't guarantee the accuracy of this page.
 </p>
+<p>Source code <a href="https://github.com/macfergus/sfusd-scraper">here</a></p>
 </div>
 '''
 
