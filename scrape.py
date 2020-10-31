@@ -17,6 +17,10 @@ Task = namedtuple('Task', 'task_id task_desc progress')
 Subtask = namedtuple('Subtask', 'task_id subtask_id subtask_desc progress')
 
 
+def is_path_safe(rootdir, path):
+    return os.path.abspath(path).startswith(rootdir)
+
+
 def get_twbx_file(output_dir):
     dashboard_url = 'https://public.tableau.com/workbooks/SFUSDReopeningReadinessDashboard.twb'
     outputfile = os.path.join(output_dir, 'dashboard.twbx')
@@ -30,8 +34,10 @@ def get_dbs(twbx_file, output_dir):
     with zipfile.ZipFile(twbx_file, 'r') as z:
         for fname in z.namelist():
             if fname.endswith('.hyper'):
-                z.extract(fname, output_dir)
-                yield os.path.join(output_dir, fname)
+                output_path = os.path.join(output_dir, fname)
+                if is_path_safe(output_dir, output_path):
+                    z.extract(fname, output_dir)
+                    yield output_path
 
 
 def to_decimal(f):
