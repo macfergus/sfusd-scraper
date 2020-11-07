@@ -13,8 +13,10 @@ import requests
 from tableauhyperapi import HyperProcess, Connection, Telemetry
 
 
-Task = namedtuple('Task', 'task_id task_desc progress')
-Subtask = namedtuple('Subtask', 'task_id subtask_id subtask_desc progress')
+Task = namedtuple('Task', 'task_id task_desc progress phase target')
+Subtask = namedtuple(
+    'Subtask', 'task_id subtask_id subtask_desc progress phase target'
+)
 
 
 def is_path_safe(rootdir, path):
@@ -65,14 +67,16 @@ def get_tasks(hyper_conn):
     results = []
     with hyper_conn.execute_query(f'SELECT * FROM {task_table}') as result:
         for row in result:
-            task_id, task_desc, _, _, _, progress = row[:6]
+            phase, task_id, task_desc, _, _, _, progress, _, _, target = row
             if task_desc is None:
                 # Seems to be some dummy rows in here
                 continue
             results.append(Task(
                 task_id=int(task_id),
                 task_desc=task_desc,
-                progress=to_decimal(progress)
+                progress=to_decimal(progress),
+                phase=phase,
+                target=target,
             ))
     return results
 
@@ -89,12 +93,17 @@ def get_subtasks(hyper_conn):
     results = []
     with hyper_conn.execute_query(f'SELECT * FROM {subtask_table}') as result:
         for row in result:
-            task_id, subtask_id, subtask_desc, _, progress = row[:5]
+            (
+                phase, task_id, subtask_id,
+                subtask_desc, _, progress, _, _, target
+            ) = row
             results.append(Subtask(
                 task_id=int(task_id),
                 subtask_id=int(subtask_id),
                 subtask_desc=subtask_desc,
-                progress=to_decimal(progress or 0.0)
+                progress=to_decimal(progress or 0.0),
+                phase=phase,
+                target=target
             ))
     return results
 
@@ -103,15 +112,39 @@ def save_tasks(conn, snapshot_ts, tasks, subtasks):
     c = conn.cursor()
     for t in tasks:
         c.execute('''
-            INSERT INTO tasks (snapshot_ts, task_id, task_desc, progress)
-            VALUES (%s, %s, %s, %s)
-        ''', (snapshot_ts, t.task_id, t.task_desc, t.progress))
+            INSERT INTO tasks (
+                snapshot_ts,
+                task_id,
+                task_desc,
+                progress,
+                phase,
+                target
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
+        ''', (
+            snapshot_ts, t.task_id, t.task_desc, t.progress, t.phase, t.target
+        ))
     for s in subtasks:
         c.execute('''
-            INSERT INTO subtasks
-                (snapshot_ts, task_id, subtask_id, subtask_desc, progress)
-            VALUES (%s, %s, %s, %s, %s)
-        ''', (snapshot_ts, s.task_id, s.subtask_id, s.subtask_desc, s.progress))
+            INSERT INTO subtasks (
+                snapshot_ts,
+                task_id,
+                subtask_id,
+                subtask_desc,
+                progress,
+                phase,
+                target
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ''', (
+            snapshot_ts,
+            s.task_id,
+            s.subtask_id,
+            s.subtask_desc,
+            s.progress,
+            s.phase,
+            s.target
+        ))
     conn.commit()
 
 

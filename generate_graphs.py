@@ -1,6 +1,7 @@
 import argparse
 import io
 import json
+import os
 import time
 
 import MySQLdb
@@ -23,7 +24,7 @@ body {
 <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 <div style="explanation">
 <p>These graphs are <strong>unofficial</strong>! The data was scraped from the
-<a href="https://public.tableau.com/profile/thu.cung#!/vizhome/SFUSDReopeningReadinessDashboard/ReopeningDashboard">Official SFUSD dashboard</a>. I try my best to keep it up to date, but I can't guarantee the accuracy of this page.
+<a href="https://public.tableau.com/profile/thu.cung#!/vizhome/SFUSDReopeningReadinessDashboard/2ADashboardandProgressView?publish=yes">Official SFUSD dashboard</a>. I try my best to keep it up to date, but I can't guarantee the accuracy of this page.
 </p>
 <p>Source code <a href="https://github.com/macfergus/sfusd-scraper">here</a></p>
 </div>
@@ -46,17 +47,18 @@ def load_tasks(conn):
     df = []
     c = conn.cursor()
     c.execute('''
-        SELECT snapshot_ts, task_id, task_desc, progress
+        SELECT snapshot_ts, task_id, task_desc, progress, phase
         FROM tasks
         ORDER BY snapshot_ts ASC
     ''')
     for row in c.fetchall():
-        snapshot_ts, task_id, task_desc, progress = row
+        snapshot_ts, task_id, task_desc, progress, phase = row
         df.append({
             'snapshot_ts': snapshot_ts,
             'task_id': task_id,
             'task_desc': task_desc,
             'progress': progress,
+            'phase': phase,
         })
     df = pd.DataFrame(df)
     df['utc_date'] = pd.to_datetime(df.snapshot_ts, unit='s')
@@ -73,18 +75,19 @@ def load_subtasks(conn):
     df = []
     c = conn.cursor()
     c.execute('''
-        SELECT snapshot_ts, task_id, subtask_id, subtask_desc, progress
+        SELECT snapshot_ts, task_id, subtask_id, subtask_desc, progress, phase
         FROM subtasks
         ORDER BY snapshot_ts ASC
     ''')
     for row in c.fetchall():
-        snapshot_ts, task_id, subtask_id, subtask_desc, progress = row
+        snapshot_ts, task_id, subtask_id, subtask_desc, progress, phase = row
         df.append({
             'snapshot_ts': snapshot_ts,
             'task_id': task_id,
             'subtask_id': subtask_id,
             'subtask_desc': subtask_desc,
             'progress': progress,
+            'phase': phase,
         })
     df = pd.DataFrame(df)
     df['utc_date'] = pd.to_datetime(df.snapshot_ts, unit='s')
@@ -155,22 +158,30 @@ def main():
     subtask_df = load_subtasks(conn)
     last_update = task_df.date.max()
 
-    graphs = []
-    graphs.append(generate_task_graph(task_df))
-    for task_id, subset in subtask_df.groupby('task_id'):
-        task_desc = task_df.query('task_id == @task_id').iloc[0].task_desc
-        graphs.append(generate_subtask_graph(subset, task_desc))
+    for phase in ['2A', '2B']:
+        task_subset = task_df.query('phase == @phase')
+        subtask_subset = subtask_df.query('phase == @phase')
+        graphs = []
+        graphs.append(generate_task_graph(task_subset))
+        for task_id, subset in subtask_subset.groupby('task_id'):
+            task_desc = task_df.query('task_id == @task_id').iloc[0].task_desc
+            graphs.append(generate_subtask_graph(subset, task_desc))
 
-    with open(args.output, 'w') as outf:
-        outf.write(HEADER + "\n")
-        for div in graphs:
-            outf.write(div)
-        outf.write(f'''
-            <div class="footer">
-            Last updated {last_update}
-            </div>
-        ''')
-        outf.write(FOOTER)
+        if phase == '2A':
+            outfile = os.path.join(args.output, 'index.html')
+        else:
+            outfile = os.path.join(args.output, '2b.html')
+
+        with open(outfile, 'w') as outf:
+            outf.write(HEADER + "\n")
+            for div in graphs:
+                outf.write(div)
+            outf.write(f'''
+                <div class="footer">
+                Last updated {last_update}
+                </div>
+            ''')
+            outf.write(FOOTER)
 
 
 if __name__ == '__main__':
